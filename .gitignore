@@ -1,0 +1,9 @@
+# Slides not to upload
+/Lecture
+/Tutorial
+# .DS_Store
+*.DS_Store
+# files
+*.pdf
+*.tar.*
+sents.*
