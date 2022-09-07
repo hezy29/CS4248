@@ -1,7 +1,8 @@
 # Slides not to upload
 /Lecture
 /Tutorial
-# .DS_Store
+# automatically generated
+*.idea
 *.DS_Store
 # files
 *.pdf
