@@ -4,6 +4,7 @@
 # automatically generated
 *.idea
 *.DS_Store
+.ipynb_checkpoints
 # files
 *.pdf
 *.tar.*
