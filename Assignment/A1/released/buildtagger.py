@@ -35,7 +35,7 @@ def train_model(train_file, model_file):
     with open(train_file) as f:
         texts_train = f.read()
     f.close()
-    paragraphs_train = texts_train.split("\n")[-1]
+    paragraphs_train = texts_train.split("\n")[:-1]
 
     PennTreebankPOS = {"[START]": {}}
     WordEmission = {}
