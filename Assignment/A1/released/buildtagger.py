@@ -1,6 +1,6 @@
 # python3.8 buildtagger.py <train_file_absolute_path> <model_file_absolute_path>
 
-from cgitb import text
+import json
 import os
 import math
 import sys
@@ -14,25 +14,11 @@ def read_file(path):
     return data
 
 
-def update_prob_transition_matrix(tag, prev_POS, A):
-    if not tag in A.keys():  # Create new state
-        A[tag] = {}
-    if not tag in A[prev_POS].keys():  # a_ij from 0 to 1
-        A[prev_POS][tag] = 1
-    else:  # a_ij from x to x+1 (x > 0)
-        A[prev_POS][tag] += 1
-
-
-def update_emission_prob_matrix(word, tag, E):
-    if not tag in E.keys():  # Create new state and record the first word appears
-        E[tag] = {word: 1}
-    else:
-        if (
-            not word in E[tag].keys()
-        ):  # Record the first word appears in the existed state
-            E[tag][word] = 1
-        else:  # Record times of appearance
-            E[tag][word] += 1
+def write_file(data, path):
+    data_json = json.dumps(data, sort_keys=False, indent=4, separators=(",", ": "))
+    with open(path, "w") as f:
+        f.write(data_json)
+    f.close()
 
 
 def ProbScale(x: dict):
@@ -46,11 +32,13 @@ def ProbScale(x: dict):
 
 def train_model(train_file, model_file):
     # write your code here. You can add functions as well.
-    texts_train = read_file(train_file)
+    with open(train_file) as f:
+        texts_train = f.read()
+    f.close()
     paragraphs_train = texts_train.split("\n")[-1]
 
-    POS_trans_mat = {"[START]": {}}
-    obs_emi_mat = {}
+    PennTreebankPOS = {"[START]": {}}
+    WordEmission = {}
 
     for paragraph_train in paragraphs_train:
         words_train = paragraph_train.split(" ")
@@ -60,16 +48,30 @@ def train_model(train_file, model_file):
             tag = word_train.split("/")[-1]
             word = word_train[: -(len(tag) + 1)]
 
-            # Transition Probability Matrix
-            update_prob_transition_matrix(tag, prev_POS, POS_trans_mat)
+            if not tag in PennTreebankPOS.keys():  # Create new state
+                PennTreebankPOS[tag] = {}
+            if not tag in PennTreebankPOS[prev_POS].keys():  # a_ij from 0 to 1
+                PennTreebankPOS[prev_POS][tag] = 1
+            else:
+                PennTreebankPOS[prev_POS][tag] += 1  # a_ij from x to x+1 (x > 0)
 
             # Observation Likelihood
-            update_emission_prob_matrix(word, tag, obs_emi_mat)
+            if not tag in WordEmission.keys():
+                WordEmission[tag] = {word: 1}
+            else:
+                if not word in WordEmission[tag].keys():
+                    WordEmission[tag][word] = 1
+                else:
+                    WordEmission[tag][word] += 1
 
             prev_POS = tag
 
-    POS_trans_mat = ProbScale(POS_trans_mat)
-    obs_emi_mat = ProbScale(obs_emi_mat)
+    POS_trans_mat = ProbScale(PennTreebankPOS)
+    obs_emi_mat = ProbScale(WordEmission)
+
+    os.makedirs(model_file, exist_ok=True)
+    write_file(POS_trans_mat, model_file + "/transition_matrix")
+    write_file(obs_emi_mat, model_file + "/observation_emission")
 
     print("Finished...")
 
