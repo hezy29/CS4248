@@ -21,12 +21,21 @@ def write_file(data, path):
     f.close()
 
 
-def ProbScale(x: dict):
-    out = x.copy()
+def ProbScale(x: dict, ref: dict or set or list = None, smoothing: str = None):
+    out = x
     for i in out.keys():
         sum_i = sum(out[i].values())
         for j in out[i].keys():
-            out[i][j] /= sum_i
+            if not smoothing:
+                out[i][j] /= sum_i
+            elif smoothing == "Witten-Bell":
+                out[i][j] /= sum_i + len(out.keys())
+        if smoothing == "Witten-Bell":
+            for ind in ref:
+                if not ind in out[i].keys():
+                    out[i][ind] = len(out.keys()) / (
+                        len(ref) * (sum_i + len(out.keys()))
+                    )
     return out
 
 
@@ -78,8 +87,13 @@ def train_model(train_file, model_file):
         else:
             PennTreebankPOS[prev_POS]["[END]"] += 1
 
-    Tprob_mat = ProbScale(PennTreebankPOS)
-    ObsL_mat = ProbScale(WordEmission)
+    Words = set()
+    for item in WordEmission.values():
+        for word in item.keys():
+            Words.add(word)
+
+    Tprob_mat = ProbScale(PennTreebankPOS, WordEmission.keys(), smoothing="Witten-Bell")
+    ObsL_mat = ProbScale(WordEmission, Words, "Witten-Bell")
 
     os.makedirs(model_file, exist_ok=True)
     write_file(Tprob_mat, model_file + "/transition_probability")
