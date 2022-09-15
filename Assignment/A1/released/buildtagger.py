@@ -30,11 +30,30 @@ def ProbScale(x: dict):
     return out
 
 
+def update_TProb(tag, prev_POS, TProb):
+    # Transition Count
+    if not tag in TProb.keys():  # Create new state
+        TProb[tag] = {}
+    if not tag in TProb[prev_POS].keys():  # a_ij from 0 to 1
+        TProb[prev_POS][tag] = 1
+    else:
+        TProb[prev_POS][tag] += 1  # a_ij from x to x+1 (x > 0)
+
+
+def update_ObsL(tag, word, ObsL):
+    # Observation Likelihood
+    if not tag in ObsL.keys():
+        ObsL[tag] = {word: 1}
+    else:
+        if not word in ObsL[tag].keys():
+            ObsL[tag][word] = 1
+        else:
+            ObsL[tag][word] += 1
+
+
 def train_model(train_file, model_file):
     # write your code here. You can add functions as well.
-    with open(train_file) as f:
-        texts_train = f.read()
-    f.close()
+    texts_train = read_file(train_file)
     paragraphs_train = texts_train.split("\n")[:-1]
 
     PennTreebankPOS = {"[START]": {}}
@@ -48,30 +67,23 @@ def train_model(train_file, model_file):
             tag = word_train.split("/")[-1]
             word = word_train[: -(len(tag) + 1)]
 
-            if not tag in PennTreebankPOS.keys():  # Create new state
-                PennTreebankPOS[tag] = {}
-            if not tag in PennTreebankPOS[prev_POS].keys():  # a_ij from 0 to 1
-                PennTreebankPOS[prev_POS][tag] = 1
-            else:
-                PennTreebankPOS[prev_POS][tag] += 1  # a_ij from x to x+1 (x > 0)
-
-            # Observation Likelihood
-            if not tag in WordEmission.keys():
-                WordEmission[tag] = {word: 1}
-            else:
-                if not word in WordEmission[tag].keys():
-                    WordEmission[tag][word] = 1
-                else:
-                    WordEmission[tag][word] += 1
+            update_TProb(tag, prev_POS, PennTreebankPOS)
+            update_ObsL(tag, word, WordEmission)
 
             prev_POS = tag
 
-    POS_trans_mat = ProbScale(PennTreebankPOS)
-    obs_emi_mat = ProbScale(WordEmission)
+        # last word to q_f
+        if not "[END]" in PennTreebankPOS[prev_POS].keys():
+            PennTreebankPOS[prev_POS]["[END]"] = 1
+        else:
+            PennTreebankPOS[prev_POS]["[END]"] += 1
+
+    Tprob_mat = ProbScale(PennTreebankPOS)
+    ObsL_mat = ProbScale(WordEmission)
 
     os.makedirs(model_file, exist_ok=True)
-    write_file(POS_trans_mat, model_file + "/transition_matrix")
-    write_file(obs_emi_mat, model_file + "/observation_emission")
+    write_file(Tprob_mat, model_file + "/transition_probability")
+    write_file(ObsL_mat, model_file + "/observation_likelihood")
 
     print("Finished...")
 
