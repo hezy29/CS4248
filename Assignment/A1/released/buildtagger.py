@@ -28,8 +28,14 @@ def ProbScale(x: dict, ref: dict or set or list = None, smoothing: str = None):
         for j in out[i].keys():
             if not smoothing:
                 out[i][j] /= sum_i
+            elif smoothing == "Add-One":
+                out[i][j] = (out[i][j] + 1) / (sum_i + len(ref))
             elif smoothing == "Witten-Bell":
                 out[i][j] /= sum_i + len(out.keys())
+        if smoothing == "Add-One":
+            for ind in ref:
+                if not ind in out[i].keys():
+                    out[i][ind] = 1 / (sum_i + len(ref))
         if smoothing == "Witten-Bell":
             for ind in ref:
                 if not ind in out[i].keys():
