@@ -99,7 +99,7 @@ def train_model(train_file, model_file):
             Words.add(word)
 
     Tprob_mat = ProbScale(PennTreebankPOS, WordEmission.keys(), smoothing="Witten-Bell")
-    ObsL_mat = ProbScale(WordEmission, Words, "Witten-Bell")
+    ObsL_mat = ProbScale(WordEmission, Words, smoothing="Witten-Bell")
 
     os.makedirs(model_file, exist_ok=True)
     write_file(Tprob_mat, model_file + "/transition_probability")

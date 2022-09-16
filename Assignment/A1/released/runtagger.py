@@ -26,7 +26,7 @@ def get_tprob(A: dict, from_state: str, to_state: str):
 
 
 def get_obsl(B: dict, state: str, word: str):
-    out = 0
+    out = 0.5
     if word in B[state].keys():
         out = B[state][word]
     return out
@@ -83,6 +83,12 @@ def tag_sentence(test_file, model_file, out_file):
     # write your code here. You can add functions as well.
     texts_test = read_file(test_file)
     paragraphs_test = texts_test.split("\n")[:-1]
+
+    Words = set()
+    for paragraph_test in paragraphs_test:
+        for word in paragraph_test:
+            Words.add(word)
+
     paragraphs_tagged = []  # To store tagged paragraph
 
     A = read_file(
@@ -106,6 +112,7 @@ def tag_sentence(test_file, model_file, out_file):
                 ]
             ]
         ).T
+
         backpoint = -np.ones((len(B.keys()), 1))
 
         for word in words_test[1:]:
