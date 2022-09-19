@@ -7,8 +7,8 @@
 .ipynb_checkpoints
 # files
 *.pdf
-*.tar.*
 sents.*
 release3.3*
 wi+locness*
 fce*
+lang8*
