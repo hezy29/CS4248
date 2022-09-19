@@ -6,9 +6,10 @@
 *.DS_Store
 .ipynb_checkpoints
 # files
-*.pdf
 sents.*
 release3.3*
 wi+locness*
 fce*
 lang8*
+Email with the professor.pdf
+Neural Network Methods for Natural Language Processing.pdf
