@@ -26,7 +26,7 @@ def get_tprob(A: dict, from_state: str, to_state: str):
 
 
 def get_obsl(B: dict, state: str, word: str):
-    out = 0.5
+    out = 1e-4  # set default obmission probability as 1/10000
     if word in B[state].keys():
         out = B[state][word]
     return out
@@ -37,7 +37,7 @@ def update_viterbi(
     transition_matrix,
     observation_likelihood,
     word,
-    backpoint: bool = False,
+    backpoint: bool = False,  # distinguish to use max() or argmax() to update viterbi or backpoint matrix
 ):
     if not backpoint:
         out = np.array(
@@ -84,11 +84,6 @@ def tag_sentence(test_file, model_file, out_file):
     texts_test = read_file(test_file)
     paragraphs_test = texts_test.split("\n")[:-1]
 
-    Words = set()
-    for paragraph_test in paragraphs_test:
-        for word in paragraph_test:
-            Words.add(word)
-
     paragraphs_tagged = []  # To store tagged paragraph
 
     A = read_file(
@@ -112,9 +107,9 @@ def tag_sentence(test_file, model_file, out_file):
                 ]
             ]
         ).T
-
         backpoint = -np.ones((len(B.keys()), 1))
 
+        # Update Viterbi and backpoint matrix
         for word in words_test[1:]:
             vit_new_col = update_viterbi(viterbi, A, B, word)
             bp_new_col = update_viterbi(viterbi, A, B, word, backpoint=True)
@@ -133,13 +128,15 @@ def tag_sentence(test_file, model_file, out_file):
         # Backtracking optimal transition for POS tagger
         backtrace = [bp_last]
         for j in range(len(words_test), 1, -1):
-            backtrace.insert(0, int(backpoint[backtrace[0]][j - 1]))
+            backtrace.append(int(backpoint[backtrace[-1]][j - 1]))
 
-        tag_test = [list(B.keys())[j] for j in backtrace]
+        tag_test = [list(B.keys())[j] for j in backtrace][::-1]
 
+        # Tag each word of each sentence
         paragraph_tagged = " ".join([a + "/" + b for a, b in zip(words_test, tag_test)])
         paragraphs_tagged.append(paragraph_tagged)
 
+    # Reconstruct whole contexts
     texts_tagged = (
         "\n".join(paragraphs_tagged) + "\n"
     )  # Add the final "\n" back to where it belongs

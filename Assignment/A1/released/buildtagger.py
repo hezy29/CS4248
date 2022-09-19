@@ -47,7 +47,7 @@ def ProbScale(x: dict, ref: dict or set or list = None, smoothing: str = None):
 
 def update_TProb(tag, prev_POS, TProb):
     # Transition Count
-    if not tag in TProb.keys():  # Create new state
+    if not tag in TProb.keys():  # create new state
         TProb[tag] = {}
     if not tag in TProb[prev_POS].keys():  # a_ij from 0 to 1
         TProb[prev_POS][tag] = 1
@@ -57,13 +57,13 @@ def update_TProb(tag, prev_POS, TProb):
 
 def update_ObsL(tag, word, ObsL):
     # Observation Likelihood
-    if not tag in ObsL.keys():
+    if not tag in ObsL.keys():  # create new observation and new state
         ObsL[tag] = {word: 1}
     else:
-        if not word in ObsL[tag].keys():
+        if not word in ObsL[tag].keys():  # create new observation in existed state
             ObsL[tag][word] = 1
         else:
-            ObsL[tag][word] += 1
+            ObsL[tag][word] += 1  # add up existed observation in existed state
 
 
 def train_model(train_file, model_file):
@@ -87,12 +87,13 @@ def train_model(train_file, model_file):
 
             prev_POS = tag
 
-        # last word to q_f
+        # Last word to q_f
         if not "[END]" in PennTreebankPOS[prev_POS].keys():
             PennTreebankPOS[prev_POS]["[END]"] = 1
         else:
             PennTreebankPOS[prev_POS]["[END]"] += 1
 
+    # Vocabulary
     Words = set()
     for item in WordEmission.values():
         for word in item.keys():
