@@ -34,12 +34,12 @@ python3 eval.py sents.out sents.answer
 
 | A\B              | No smoothing | Add-One | Witten-Bell |
 | ---------------- | ------------ | ------- | ----------- |
-| **No smoothing** | 5.53%        | 92.77%  | 95.34%      |
-| **Add-One**      | \            | 92.78%  | 95.35%      |
-| **Witten-Bell**  | \            | 92.77%  | 95.35%      |
+| **No smoothing** | 86.86%       | 92.77%  | 95.34%      |
+| **Add-One**      | 86.87%       | 92.78%  | 95.35%      |
+| **Witten-Bell**  | 86.87%       | 92.77%  | 95.35%      |
 
 > Notes:
 > 
-> 1. Observation Likelihood Scaling is much more time-consuming than Transition Probability
+> 1. Observation Likelihood Scaling is much more time-consuming than Transition Probability. 
 > 
-> 2. Add-One smoothing methodology has little effect on Observation Likelihood
+> 2. Smoothing on Observation Likelihood is much more effective than that on Transition Probability due to OOV words. 
