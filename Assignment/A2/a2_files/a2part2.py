@@ -31,6 +31,13 @@ class LangDataset(Dataset):
         """
         self.texts = None
         self.labels = None
+        with open(text_path) as f:
+            self.texts=[x[:-1] for x in f.writelines()]
+        f.close()
+        if not label_path:
+            with open(label_path) as f:
+                self.labels=[x[:-1] for x in f.writelines()]
+            f.close()
 
     def vocab_size(self):
         """
