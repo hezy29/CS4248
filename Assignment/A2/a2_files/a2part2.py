@@ -1,4 +1,3 @@
-from calendar import c
 import os
 import re
 import sys
@@ -85,37 +84,6 @@ class LangDataset(Dataset):
 
         DO NOT pad the tensor here, do it at the collator function.
         """
-        # embedding_dim = 16
-        # bigram_embeds = nn.Embedding(
-        #     num_embeddings=len(self.vocab), embedding_dim=embedding_dim
-        # )
-        # labels_idx = {
-        #     x: i for x, i in zip(set(self.labels), range(len(set(self.labels))))
-        # }
-        # label_embeds = nn.Embedding(
-        #     num_embeddings=len(set(self.labels)), embedding_dim=embedding_dim
-        # )
-        # text = (
-        #     torch.stack(
-        #         [
-        #             bigram_embeds(torch.tensor([self.vocab[x]], dtype=torch.long))
-        #             for x in set(
-        #                 [
-        #                     x + y
-        #                     for x, y in zip(
-        #                         re.sub(r"[^\w\s]", "", self.texts[i])[:-1],
-        #                         re.sub(r"[^\w\s]", "", self.texts[i])[1:],
-        #                     )
-        #                 ]
-        #             )
-        #         ]
-        #     )
-        #     .mean(axis=0)
-        #     .reshape(-1)
-        # )
-        # label = label_embeds(
-        #     torch.tensor([labels_idx[self.labels[i]]], dtype=torch.long)
-        # )
         tokens = re.sub(r"[^\w\s]", "", self.texts[i])
         text = [self.vocab[x + y] for x, y in zip(tokens[:-1], tokens[1:])]
         label = self.labels[i]
@@ -133,7 +101,7 @@ class Model(nn.Module):
     def __init__(self, num_vocab, num_class, dropout=0.3):
         super().__init__()
         # define your model here
-        self.linear1 = nn.Linear(num_vocab, 200)
+        self.linear1 = nn.Linear(16, 200)
         self.activation = nn.ReLU()
         self.linear2 = nn.Linear(200, num_class)
         self.softmax = nn.Softmax()
@@ -199,11 +167,6 @@ def train(
                 num_embeddings=len(dataset.vocab), embedding_dim=embedding_dim
             )
 
-            labels_idx = {"eng": 0, "deu": 1, "fra": 2, "ita": 3, "spa": 4}
-            label_embeds = nn.Embedding(
-                num_embeddings=len(labels_idx), embedding_dim=embedding_dim
-            )
-
             x = torch.stack(
                 [
                     torch.stack(
@@ -216,13 +179,17 @@ def train(
                     .reshape(-1)
                     for text in [texts[i, :] for i in range(texts.size(0))]
                 ]
-            )
+            ).to(device)
 
-            y = torch.stack(
-                [
-                    label_embeds(torch.tensor([label], dtype=torch.long))
-                    for label in labels.tolist()
-                ]
+            y = (
+                torch.stack(
+                    [
+                        F.pad(torch.tensor([1]), (label_idx, 4 - label_idx))
+                        for label_idx in labels.tolist()
+                    ]
+                )
+                .float()
+                .to(device)
             )
 
             # zero the parameter gradients
