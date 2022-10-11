@@ -22,6 +22,7 @@ class LangDataset(Dataset):
 
     DO NOT shuffle the dataset here, and DO NOT pad the tensor here.
     """
+
     def __init__(self, text_path, label_path=None, vocab=None):
         """
         Read the content of vocab and text_file
@@ -31,13 +32,33 @@ class LangDataset(Dataset):
         """
         self.texts = None
         self.labels = None
+
         with open(text_path) as f:
-            self.texts=[x[:-1] for x in f.writelines()]
+            self.texts = [x[:-1] for x in f.writelines()]
         f.close()
         if not label_path:
             with open(label_path) as f:
-                self.labels=[x[:-1] for x in f.writelines()]
+                self.labels = [x[:-1] for x in f.writelines()]
             f.close()
+
+        if not vocab:
+            characters = {}
+            idx = 0
+            for text in self.texts:
+                char_set = set(
+                    [
+                        x + y
+                        for x, y in zip(
+                            re.sub(r"[^\w\s]", "", text)[:-1],
+                            re.sub(r"[^\w\s]", "", text)[1:],
+                        )
+                    ]
+                )
+                for each_char in char_set:
+                    if not each_char in characters:
+                        characters[each_char] = idx
+                        idx += 1
+            self.vocab = characters
 
     def vocab_size(self):
         """
@@ -45,15 +66,15 @@ class LangDataset(Dataset):
             num_vocab: size of the vocabulary
             num_class: number of class labels
         """
-        num_vocab = None
-        num_class = None
+        num_vocab = self.vocab.num_embeddings
+        num_class = len(set(self.labels))
         return num_vocab, num_class
-    
+
     def __len__(self):
         """
         Return the number of instances in the data
         """
-        return None
+        return len(self.texts)
 
     def __getitem__(self, i):
         """
@@ -63,9 +84,38 @@ class LangDataset(Dataset):
 
         DO NOT pad the tensor here, do it at the collator function.
         """
-        text = None
-        label = None
-        
+        embedding_dim = 16
+        bigram_embeds = nn.Embedding(
+            num_embeddings=len(self.vocab), embedding_dim=embedding_dim
+        )
+        labels_idx = {
+            x: i for x, i in zip(set(self.labels), range(len(set(self.labels))))
+        }
+        label_embeds = nn.Embedding(
+            num_embeddings=len(set(self.labels)), embedding_dim=embedding_dim
+        )
+        text = (
+            torch.stack(
+                [
+                    bigram_embeds(torch.tensor([self.vocab[x]], dtype=torch.long))
+                    for x in set(
+                        [
+                            x + y
+                            for x, y in zip(
+                                re.sub(r"[^\w\s]", "", self.texts[i])[:-1],
+                                re.sub(r"[^\w\s]", "", self.texts[i])[1:],
+                            )
+                        ]
+                    )
+                ]
+            )
+            .mean(axis=0)
+            .reshape(-1)
+        )
+        label = label_embeds(
+            torch.tensor([labels_idx[self.labels[i]]], dtype=torch.long)
+        )
+
         return text, label
 
 
@@ -75,14 +125,23 @@ class Model(nn.Module):
     a feed-forward layers that reduce the dimension from 16 to 200 with ReLU activation
     a dropout layer, and a feed-forward layers that reduce the dimension from 200 to num_class
     """
+
     def __init__(self, num_vocab, num_class, dropout=0.3):
         super().__init__()
         # define your model here
+        self.linear1 = nn.Linear(num_vocab, 200)
+        self.activation = nn.ReLU()
+        self.linear2 = nn.Linear(200, num_class)
+        self.softmax = nn.Softmax()
 
     def forward(self, x):
         # define the forward function here
+        x = self.linear1(x)
+        x = self.activation(x)
+        x = self.linear2(x)
+        x = self.softmax(x)
 
-        return 
+        return x
 
 
 def collator(batch):
@@ -92,23 +151,31 @@ def collator(batch):
         texts: a tensor that combines all the text in the mini-batch, pad with 0
         labels: a tensor that combines all the labels in the mini-batch
     """
-    texts = None
-    labels = None
-    
+    unit_text, unit_label = [], []
+    for unit in batch:
+        unit_text.append(unit[0])
+        unit_label.append(unit[1])
+    texts = torch.stack(unit_text)
+    labels = torch.stack(unit_label)
+
     return texts, labels
 
 
-def train(model, dataset, batch_size, learning_rate, num_epoch, device='cpu', model_path=None):
+def train(
+    model, dataset, batch_size, learning_rate, num_epoch, device="cpu", model_path=None
+):
     """
     Complete the training procedure below by specifying the loss function
     and optimizers with the specified learning rate and specified number of epoch.
-    
+
     Do not calculate the loss from padding.
     """
-    data_loader = DataLoader(dataset, batch_size=batch_size, collate_fn=collator, shuffle=True)
+    data_loader = DataLoader(
+        dataset, batch_size=batch_size, collate_fn=collator, shuffle=True
+    )
 
     # assign these variables
-    criterion = None
+    criterion = F.cross_entropy()
     optimizer = None
 
     start = datetime.datetime.now()
@@ -134,22 +201,23 @@ def train(model, dataset, batch_size, learning_rate, num_epoch, device='cpu', mo
 
             # print loss value every 100 steps and reset the running loss
             if step % 100 == 99:
-                print('[%d, %5d] loss: %.3f' %
-                    (epoch + 1, step + 1, running_loss / 100))
+                print(
+                    "[%d, %5d] loss: %.3f" % (epoch + 1, step + 1, running_loss / 100)
+                )
                 running_loss = 0.0
 
     end = datetime.datetime.now()
-    
+
     # define the checkpoint and save it to the model path
     # tip: the checkpoint can contain more than just the model
     checkpoint = None
     torch.save(checkpoint, model_path)
 
-    print('Model saved in ', model_path)
-    print('Training finished in {} minutes.'.format((end - start).seconds / 60.0))
+    print("Model saved in ", model_path)
+    print("Training finished in {} minutes.".format((end - start).seconds / 60.0))
 
 
-def test(model, dataset, class_map, device='cpu'):
+def test(model, dataset, class_map, device="cpu"):
     model.eval()
     data_loader = DataLoader(dataset, batch_size=20, collate_fn=collator, shuffle=False)
     labels = []
@@ -164,54 +232,75 @@ def test(model, dataset, class_map, device='cpu'):
 
 def main(args):
     if torch.cuda.is_available():
-        device_str = 'cuda:{}'.format(0)
+        device_str = "cuda:{}".format(0)
     else:
-        device_str = 'cpu'
+        device_str = "cpu"
     device = torch.device(device_str)
-    
+
     assert args.train or args.test, "Please specify --train or --test"
     if args.train:
-        assert args.label_path is not None, "Please provide the labels for training using --label_path argument"
+        assert (
+            args.label_path is not None
+        ), "Please provide the labels for training using --label_path argument"
         dataset = LangDataset(args.text_path, args.label_path)
         num_vocab, num_class = dataset.vocab_size()
         model = Model(num_vocab, num_class).to(device)
-        
+
         # you may change these hyper-parameters
         learning_rate = None
         batch_size = None
         num_epochs = None
 
-        train(model, dataset, batch_size, learning_rate, num_epochs, device, args.model_path)
+        train(
+            model,
+            dataset,
+            batch_size,
+            learning_rate,
+            num_epochs,
+            device,
+            args.model_path,
+        )
     if args.test:
-        assert args.model_path is not None, "Please provide the model to test using --model_path argument"
-        
+        assert (
+            args.model_path is not None
+        ), "Please provide the model to test using --model_path argument"
+
         # create the test dataset object using LangDataset class
 
-
         # initialize and load the model
-
 
         # the lang map should contain the mapping between class id to the language id (e.g. eng, fra, etc.)
         lang_map = None
 
         # run the prediction
         preds = test(model, dataset, lang_map, device)
-        
+
         # write the output
-        with open(args.output_path, 'w', encoding='utf-8') as out:
-            out.write('\n'.join(preds))
-    print('\n==== A2 Part 2 Done ====')
+        with open(args.output_path, "w", encoding="utf-8") as out:
+            out.write("\n".join(preds))
+    print("\n==== A2 Part 2 Done ====")
 
 
 def get_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--text_path', help='path to the text file')
-    parser.add_argument('--label_path', default=None, help='path to the label file')
-    parser.add_argument('--train', default=False, action='store_true', help='train the model')
-    parser.add_argument('--test', default=False, action='store_true', help='test the model')
-    parser.add_argument('--model_path', required=True, help='path to the output file during testing')
-    parser.add_argument('--output_path', default='out.txt', help='path to the output file during testing')
+    parser.add_argument("--text_path", help="path to the text file")
+    parser.add_argument("--label_path", default=None, help="path to the label file")
+    parser.add_argument(
+        "--train", default=False, action="store_true", help="train the model"
+    )
+    parser.add_argument(
+        "--test", default=False, action="store_true", help="test the model"
+    )
+    parser.add_argument(
+        "--model_path", required=True, help="path to the output file during testing"
+    )
+    parser.add_argument(
+        "--output_path",
+        default="out.txt",
+        help="path to the output file during testing",
+    )
     return parser.parse_args()
+
 
 if __name__ == "__main__":
     args = get_arguments()
