@@ -1,3 +1,4 @@
+from calendar import c
 import os
 import re
 import sys
@@ -203,39 +204,25 @@ def train(
                 num_embeddings=len(labels_idx), embedding_dim=embedding_dim
             )
 
-            x = []
-
-            for i in range(texts.size(0)):
-                text = texts[i, :].tolist()
-                print(dataset.vocab)
-                text_embed = (
+            x = torch.stack(
+                [
                     torch.stack(
                         [
-                            bigram_embeds(
-                                torch.tensor(
-                                    [dataset.vocab[bigram_idx]], dtype=torch.long
-                                )
-                            )
+                            bigram_embeds(torch.tensor([bigram_idx], dtype=torch.long))
                             for bigram_idx in text
                         ]
                     )
                     .mean(axis=0)
                     .reshape(-1)
-                )
-                print(text_embed)
-                x.append(text_embed)
-
-            x = torch.stack(x)
+                    for text in [texts[i, :] for i in range(texts.size(0))]
+                ]
+            )
 
             y = torch.stack(
-                torch.tensor(
-                    [
-                        label_embeds(
-                            torch.tensor([labels_idx[label]], dtype=torch.long)
-                        )
-                        for label in labels
-                    ]
-                )
+                [
+                    label_embeds(torch.tensor([label], dtype=torch.long))
+                    for label in labels.tolist()
+                ]
             )
 
             # zero the parameter gradients
