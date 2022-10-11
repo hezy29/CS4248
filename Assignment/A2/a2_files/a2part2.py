@@ -34,11 +34,11 @@ class LangDataset(Dataset):
         self.labels = None
 
         with open(text_path) as f:
-            self.texts = [x[:-1] for x in f.writelines()]
+            self.texts = [x[:-1] for x in f.readlines()]
         f.close()
-        if not label_path:
+        if not label_path == None:
             with open(label_path) as f:
-                self.labels = [x[:-1] for x in f.writelines()]
+                self.labels = [x[:-1] for x in f.readlines()]
             f.close()
 
         if not vocab:
@@ -66,7 +66,7 @@ class LangDataset(Dataset):
             num_vocab: size of the vocabulary
             num_class: number of class labels
         """
-        num_vocab = self.vocab.num_embeddings
+        num_vocab = len(self.vocab)
         num_class = len(set(self.labels))
         return num_vocab, num_class
 
@@ -84,37 +84,40 @@ class LangDataset(Dataset):
 
         DO NOT pad the tensor here, do it at the collator function.
         """
-        embedding_dim = 16
-        bigram_embeds = nn.Embedding(
-            num_embeddings=len(self.vocab), embedding_dim=embedding_dim
-        )
-        labels_idx = {
-            x: i for x, i in zip(set(self.labels), range(len(set(self.labels))))
-        }
-        label_embeds = nn.Embedding(
-            num_embeddings=len(set(self.labels)), embedding_dim=embedding_dim
-        )
-        text = (
-            torch.stack(
-                [
-                    bigram_embeds(torch.tensor([self.vocab[x]], dtype=torch.long))
-                    for x in set(
-                        [
-                            x + y
-                            for x, y in zip(
-                                re.sub(r"[^\w\s]", "", self.texts[i])[:-1],
-                                re.sub(r"[^\w\s]", "", self.texts[i])[1:],
-                            )
-                        ]
-                    )
-                ]
-            )
-            .mean(axis=0)
-            .reshape(-1)
-        )
-        label = label_embeds(
-            torch.tensor([labels_idx[self.labels[i]]], dtype=torch.long)
-        )
+        # embedding_dim = 16
+        # bigram_embeds = nn.Embedding(
+        #     num_embeddings=len(self.vocab), embedding_dim=embedding_dim
+        # )
+        # labels_idx = {
+        #     x: i for x, i in zip(set(self.labels), range(len(set(self.labels))))
+        # }
+        # label_embeds = nn.Embedding(
+        #     num_embeddings=len(set(self.labels)), embedding_dim=embedding_dim
+        # )
+        # text = (
+        #     torch.stack(
+        #         [
+        #             bigram_embeds(torch.tensor([self.vocab[x]], dtype=torch.long))
+        #             for x in set(
+        #                 [
+        #                     x + y
+        #                     for x, y in zip(
+        #                         re.sub(r"[^\w\s]", "", self.texts[i])[:-1],
+        #                         re.sub(r"[^\w\s]", "", self.texts[i])[1:],
+        #                     )
+        #                 ]
+        #             )
+        #         ]
+        #     )
+        #     .mean(axis=0)
+        #     .reshape(-1)
+        # )
+        # label = label_embeds(
+        #     torch.tensor([labels_idx[self.labels[i]]], dtype=torch.long)
+        # )
+        tokens = re.sub(r"[^\w\s]", "", self.texts[i])
+        text = [self.vocab[x + y] for x, y in zip(tokens[:-1], tokens[1:])]
+        label = self.labels[i]
 
         return text, label
 
@@ -151,12 +154,15 @@ def collator(batch):
         texts: a tensor that combines all the text in the mini-batch, pad with 0
         labels: a tensor that combines all the labels in the mini-batch
     """
+    labels_idx = {"eng": 0, "deu": 1, "fra": 2, "ita": 3, "spa": 4}
     unit_text, unit_label = [], []
     for unit in batch:
-        unit_text.append(unit[0])
-        unit_label.append(unit[1])
+        unpadded = torch.tensor(unit[0])
+        padded = F.pad(unpadded, (0, max([len(x[0]) for x in batch]) - len(unpadded)))
+        unit_text.append(padded)
+        unit_label.append(labels_idx[unit[1]])
     texts = torch.stack(unit_text)
-    labels = torch.stack(unit_label)
+    labels = torch.tensor(unit_label)
 
     return texts, labels
 
@@ -175,8 +181,9 @@ def train(
     )
 
     # assign these variables
-    criterion = F.cross_entropy()
-    optimizer = None
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+    embedding_dim = 16
 
     start = datetime.datetime.now()
     for epoch in range(num_epoch):
@@ -187,15 +194,65 @@ def train(
             texts = data[0].to(device)
             labels = data[1].to(device)
 
+            bigram_embeds = nn.Embedding(
+                num_embeddings=len(dataset.vocab), embedding_dim=embedding_dim
+            )
+
+            labels_idx = {"eng": 0, "deu": 1, "fra": 2, "ita": 3, "spa": 4}
+            label_embeds = nn.Embedding(
+                num_embeddings=len(labels_idx), embedding_dim=embedding_dim
+            )
+
+            x = []
+
+            for i in range(texts.size(0)):
+                text = texts[i, :].tolist()
+                print(dataset.vocab)
+                text_embed = (
+                    torch.stack(
+                        [
+                            bigram_embeds(
+                                torch.tensor(
+                                    [dataset.vocab[bigram_idx]], dtype=torch.long
+                                )
+                            )
+                            for bigram_idx in text
+                        ]
+                    )
+                    .mean(axis=0)
+                    .reshape(-1)
+                )
+                print(text_embed)
+                x.append(text_embed)
+
+            x = torch.stack(x)
+
+            y = torch.stack(
+                torch.tensor(
+                    [
+                        label_embeds(
+                            torch.tensor([labels_idx[label]], dtype=torch.long)
+                        )
+                        for label in labels
+                    ]
+                )
+            )
+
             # zero the parameter gradients
+            for param in model.parameters():
+                param.grad = None
 
             # do forward propagation
+            y_pred = model(x)
 
             # do loss calculation
+            loss = criterion(y, y_pred)
 
             # do backward propagation
+            loss.backward()
 
             # do parameter optimization step
+            optimizer.step()
 
             # calculate running loss value for non padding
 
@@ -247,9 +304,9 @@ def main(args):
         model = Model(num_vocab, num_class).to(device)
 
         # you may change these hyper-parameters
-        learning_rate = None
-        batch_size = None
-        num_epochs = None
+        learning_rate = 0.01
+        batch_size = 10
+        num_epochs = 100
 
         train(
             model,
