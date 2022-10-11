@@ -14,7 +14,7 @@ def question2(data):
     Define a function to convert a python list into a pytorch tensor with torch.long data type
     """
 
-    return torch.tensor(data=data, dtype=torch.long)
+    return torch.tensor(data=data).long()
 
 
 def question3(a, b):
