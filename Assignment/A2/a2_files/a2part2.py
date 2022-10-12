@@ -34,16 +34,16 @@ class LangDataset(Dataset):
         self.labels = None
 
         with open(text_path) as f:
-            self.texts = [x[:-1] for x in f.readlines()]
+            self.texts = [x.lower()[:-1] for x in f.readlines()]
         f.close()
         if not label_path == None:
             with open(label_path) as f:
-                self.labels = [x[:-1] for x in f.readlines()]
+                self.labels = [x.lower()[:-1] for x in f.readlines()]
             f.close()
 
         if not vocab:
             characters = {}
-            idx = 0
+            idx = 1
             for text in self.texts:
                 char_set = set(
                     [
@@ -67,7 +67,9 @@ class LangDataset(Dataset):
             num_class: number of class labels
         """
         num_vocab = len(self.vocab)
-        num_class = len(set(self.labels))
+        num_class = None
+        if not self.labels == None:
+            num_class = len(set(self.labels))
         return num_vocab, num_class
 
     def __len__(self):
@@ -101,15 +103,32 @@ class Model(nn.Module):
     def __init__(self, num_vocab, num_class, dropout=0.3):
         super().__init__()
         # define your model here
+        self.embedding = nn.Embedding(num_embeddings=num_vocab + 1, embedding_dim=16)
         self.linear1 = nn.Linear(16, 200)
         self.activation = nn.ReLU()
+        self.dropout = nn.Dropout(dropout)
         self.linear2 = nn.Linear(200, num_class)
         self.softmax = nn.Softmax()
 
     def forward(self, x):
         # define the forward function here
+        x_non_padding = x.count_nonzero(
+            dim=1
+        )  # Record non-padding item number for each text
+        x = x.reshape(-1)  # In order to use `embedding` function
+        x = self.embedding(x).reshape(
+            x_non_padding.size(0), -1, 16
+        )  # Bigram Embedding for each text
+        x = (
+            x.sum(dim=1)
+            - (x.size(1) - x_non_padding.reshape(x_non_padding.size(0), 1)).float()
+            @ self.embedding(x.new_zeros(1, dtype=torch.long))
+        ) / x_non_padding.reshape(
+            x_non_padding.size(0), 1
+        ).float()  # Text Embedding ignoring padding
         x = self.linear1(x)
         x = self.activation(x)
+        x = self.dropout(x)
         x = self.linear2(x)
         x = self.softmax(x)
 
@@ -152,7 +171,6 @@ def train(
     # assign these variables
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=learning_rate)
-    embedding_dim = 16
 
     start = datetime.datetime.now()
     for epoch in range(num_epoch):
@@ -163,41 +181,14 @@ def train(
             texts = data[0].to(device)
             labels = data[1].to(device)
 
-            bigram_embeds = nn.Embedding(
-                num_embeddings=len(dataset.vocab), embedding_dim=embedding_dim
-            )
-
-            x = torch.stack(
-                [
-                    torch.stack(
-                        [
-                            bigram_embeds(torch.tensor([bigram_idx], dtype=torch.long))
-                            for bigram_idx in text
-                        ]
-                    )
-                    .mean(axis=0)
-                    .reshape(-1)
-                    for text in [texts[i, :] for i in range(texts.size(0))]
-                ]
-            ).to(device)
-
-            y = (
-                torch.stack(
-                    [
-                        F.pad(torch.tensor([1]), (label_idx, 4 - label_idx))
-                        for label_idx in labels.tolist()
-                    ]
-                )
-                .float()
-                .to(device)
-            )
+            y = torch.eye(5)[labels].to(device)
 
             # zero the parameter gradients
             for param in model.parameters():
                 param.grad = None
 
             # do forward propagation
-            y_pred = model(x)
+            y_pred = model(texts)
 
             # do loss calculation
             loss = criterion(y, y_pred)
@@ -209,6 +200,7 @@ def train(
             optimizer.step()
 
             # calculate running loss value for non padding
+            running_loss += loss.item() * texts.size(0)
 
             # print loss value every 100 steps and reset the running loss
             if step % 100 == 99:
@@ -221,7 +213,7 @@ def train(
 
     # define the checkpoint and save it to the model path
     # tip: the checkpoint can contain more than just the model
-    checkpoint = None
+    checkpoint = {"state_dict": model.state_dict(), "params": dataset.vocab_size()}
     torch.save(checkpoint, model_path)
 
     print("Model saved in ", model_path)
@@ -259,7 +251,7 @@ def main(args):
 
         # you may change these hyper-parameters
         learning_rate = 0.01
-        batch_size = 10
+        batch_size = 20
         num_epochs = 100
 
         train(
@@ -277,8 +269,12 @@ def main(args):
         ), "Please provide the model to test using --model_path argument"
 
         # create the test dataset object using LangDataset class
+        dataset = LangDataset(args.text_path)
+        num_vocab, num_class = dataset.vocab_size()
 
         # initialize and load the model
+        model = Model(num_vocab, 5)
+        model.load_state_dict(torch.load(args.model_path))
 
         # the lang map should contain the mapping between class id to the language id (e.g. eng, fra, etc.)
         lang_map = None
