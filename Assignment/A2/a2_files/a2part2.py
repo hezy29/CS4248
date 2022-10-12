@@ -34,11 +34,11 @@ class LangDataset(Dataset):
         self.labels = None
 
         with open(text_path) as f:
-            self.texts = [x.lower()[:-1] for x in f.readlines()]
+            self.texts = [x[:-1] for x in f.readlines()]
         f.close()
         if not label_path == None:
             with open(label_path) as f:
-                self.labels = [x.lower()[:-1] for x in f.readlines()]
+                self.labels = [x[:-1] for x in f.readlines()]
             f.close()
 
         if not vocab:
@@ -88,7 +88,9 @@ class LangDataset(Dataset):
         """
         tokens = re.sub(r"[^\w\s]", "", self.texts[i])
         text = [self.vocab[x + y] for x, y in zip(tokens[:-1], tokens[1:])]
-        label = self.labels[i]
+        label = None
+        if not self.labels == None:
+            label = self.labels[i]
 
         return text, label
 
@@ -104,10 +106,10 @@ class Model(nn.Module):
         super().__init__()
         # define your model here
         self.embedding = nn.Embedding(num_embeddings=num_vocab + 1, embedding_dim=16)
-        self.linear1 = nn.Linear(16, 200)
+        self.fc1 = nn.Linear(16, 200)
         self.activation = nn.ReLU()
         self.dropout = nn.Dropout(dropout)
-        self.linear2 = nn.Linear(200, num_class)
+        self.fc2 = nn.Linear(200, num_class)
         self.softmax = nn.Softmax()
 
     def forward(self, x):
@@ -126,10 +128,11 @@ class Model(nn.Module):
         ) / x_non_padding.reshape(
             x_non_padding.size(0), 1
         ).float()  # Text Embedding ignoring padding
-        x = self.linear1(x)
+        x = nn.functional.normalize(x)
+        x = self.fc1(x)
         x = self.activation(x)
-        x = self.dropout(x)
-        x = self.linear2(x)
+        # x = self.dropout(x)
+        x = self.fc2(x)
         x = self.softmax(x)
 
         return x
@@ -148,9 +151,14 @@ def collator(batch):
         unpadded = torch.tensor(unit[0])
         padded = F.pad(unpadded, (0, max([len(x[0]) for x in batch]) - len(unpadded)))
         unit_text.append(padded)
+        if not unit[1]:
+            continue
         unit_label.append(labels_idx[unit[1]])
     texts = torch.stack(unit_text)
-    labels = torch.tensor(unit_label)
+    if not unit_label:
+        labels = unit_label
+    else:
+        labels = torch.tensor(unit_label)
 
     return texts, labels
 
@@ -170,7 +178,10 @@ def train(
 
     # assign these variables
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+    optimizer = optim.SGD(
+        model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=0.001
+    )
+    # optimizer=optim.Adam(model.parameters(),lr=learning_rate)
 
     start = datetime.datetime.now()
     for epoch in range(num_epoch):
@@ -200,7 +211,7 @@ def train(
             optimizer.step()
 
             # calculate running loss value for non padding
-            running_loss += loss.item() * texts.size(0)
+            running_loss += loss.item()
 
             # print loss value every 100 steps and reset the running loss
             if step % 100 == 99:
@@ -227,8 +238,9 @@ def test(model, dataset, class_map, device="cpu"):
     with torch.no_grad():
         for data in data_loader:
             texts = data[0].to(device)
-            outputs = model(texts).cpu()
+            outputs = model(texts)
             # get the label predictions
+            labels += [class_map[idx] for idx in outputs.argmax(dim=1).tolist()]
 
     return labels
 
@@ -251,8 +263,8 @@ def main(args):
 
         # you may change these hyper-parameters
         learning_rate = 0.01
-        batch_size = 20
-        num_epochs = 100
+        batch_size = 10
+        num_epochs = 40
 
         train(
             model,
@@ -273,11 +285,14 @@ def main(args):
         num_vocab, num_class = dataset.vocab_size()
 
         # initialize and load the model
-        model = Model(num_vocab, 5)
-        model.load_state_dict(torch.load(args.model_path))
+        trained = torch.load(args.model_path)
+        model = Model(trained["params"][0], trained["params"][1]).to(device)
+        model.load_state_dict(trained["state_dict"])
 
         # the lang map should contain the mapping between class id to the language id (e.g. eng, fra, etc.)
-        lang_map = None
+        lang_map = {
+            k: v for v, k in {"eng": 0, "deu": 1, "fra": 2, "ita": 3, "spa": 4}.items()
+        }
 
         # run the prediction
         preds = test(model, dataset, lang_map, device)
