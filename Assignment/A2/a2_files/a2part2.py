@@ -32,16 +32,20 @@ class LangDataset(Dataset):
         """
         self.texts = None
         self.labels = None
-        self.vocab = vocab
+        self.vocab = vocab  # initialize vocab for test procedure
 
+        # Loading texts
         with open(text_path) as f:
             self.texts = [x[:-1] for x in f.readlines()]
         f.close()
+
+        # Loading labels (for training)
         if not label_path == None:
             with open(label_path) as f:
                 self.labels = [x[:-1] for x in f.readlines()]
             f.close()
 
+        # Constructing bigram index (for training)
         if not vocab:
             characters = {}
             idx = 1
@@ -87,12 +91,19 @@ class LangDataset(Dataset):
 
         DO NOT pad the tensor here, do it at the collator function.
         """
+        # Tokenizing
         tokens = re.sub(r"[^\w\s]", "", self.texts[i])
+
+        # Constructing character bigram
         text = [
-            self.vocab[x + y] if x + y in self.vocab else 0
+            self.vocab[x + y]
+            if x + y in self.vocab
+            else 0  # OOV words to be considered as padding item
             for x, y in zip(tokens[:-1], tokens[1:])
         ]
+
         label = None
+        # Getting label (for training)
         if not self.labels == None:
             label = self.labels[i]
 
@@ -143,17 +154,19 @@ def collator(batch):
         texts: a tensor that combines all the text in the mini-batch, pad with 0
         labels: a tensor that combines all the labels in the mini-batch
     """
+    # Label index
     labels_idx = {"eng": 0, "deu": 1, "fra": 2, "ita": 3, "spa": 4}
     unit_text, unit_label = [], []
     for unit in batch:
         unpadded = torch.tensor(unit[0])
         padded = F.pad(unpadded, (0, max([len(x[0]) for x in batch]) - len(unpadded)))
         unit_text.append(padded)
-        if not unit[1]:
+
+        if not unit[1]:  # Testing without labels input
             continue
         unit_label.append(labels_idx[unit[1]])
     texts = torch.stack(unit_text)
-    if not unit_label:
+    if not unit_label:  # Testing without labels input
         labels = unit_label
     else:
         labels = torch.tensor(unit_label)
@@ -176,10 +189,7 @@ def train(
 
     # assign these variables
     criterion = nn.CrossEntropyLoss()
-    # optimizer = optim.SGD(
-    #     model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-3
-    # )
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-3)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-3)  # Optimizing using ADAM algorithm with 1e-3 weight_decay to prevent overfitting
 
     start = datetime.datetime.now()
     for epoch in range(num_epoch):
@@ -263,8 +273,8 @@ def main(args):
 
         # you may change these hyper-parameters
         learning_rate = 0.01
-        batch_size = 10
-        num_epochs = 40
+        batch_size = 20
+        num_epochs = 100
 
         train(
             model,
