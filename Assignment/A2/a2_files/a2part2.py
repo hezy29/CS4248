@@ -156,7 +156,7 @@ def collator(batch):
     if not unit_label:
         labels = unit_label
     else:
-        labels = torch.tensor(unit_label)
+        labels = torch.tensor(unit_label, dtype=torch.float)
 
     return texts, labels
 
