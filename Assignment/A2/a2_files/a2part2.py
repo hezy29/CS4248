@@ -156,7 +156,7 @@ def collator(batch):
     if not unit_label:
         labels = unit_label
     else:
-        labels = torch.tensor(unit_label, dtype=torch.float)
+        labels = torch.tensor(unit_label)
 
     return texts, labels
 
@@ -190,17 +190,16 @@ def train(
             texts = data[0].to(device)
             labels = data[1].to(device)
 
-            y = torch.eye(5)[labels].to(device)
 
             # zero the parameter gradients
             for param in model.parameters():
                 param.grad = None
 
             # do forward propagation
-            y_pred = model(texts)
+            labels_pred = model(texts)
 
             # do loss calculation
-            loss = criterion(y, y_pred)
+            loss = criterion(labels_pred, labels)
 
             # do backward propagation
             loss.backward()
