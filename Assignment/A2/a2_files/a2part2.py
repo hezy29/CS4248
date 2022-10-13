@@ -32,6 +32,7 @@ class LangDataset(Dataset):
         """
         self.texts = None
         self.labels = None
+        self.vocab = vocab
 
         with open(text_path) as f:
             self.texts = [x[:-1] for x in f.readlines()]
@@ -87,7 +88,10 @@ class LangDataset(Dataset):
         DO NOT pad the tensor here, do it at the collator function.
         """
         tokens = re.sub(r"[^\w\s]", "", self.texts[i])
-        text = [self.vocab[x + y] for x, y in zip(tokens[:-1], tokens[1:])]
+        text = [
+            self.vocab[x + y] if x + y in self.vocab else 0
+            for x, y in zip(tokens[:-1], tokens[1:])
+        ]
         label = None
         if not self.labels == None:
             label = self.labels[i]
@@ -105,7 +109,9 @@ class Model(nn.Module):
     def __init__(self, num_vocab, num_class, dropout=0.3):
         super().__init__()
         # define your model here
-        self.embedding = nn.Embedding(num_embeddings=num_vocab + 1, embedding_dim=16)
+        self.embedding = nn.Embedding(
+            num_embeddings=num_vocab + 1, embedding_dim=16, padding_idx=0
+        )
         self.fc1 = nn.Linear(16, 200)
         self.activation = nn.ReLU()
         self.dropout = nn.Dropout(dropout)
@@ -117,21 +123,13 @@ class Model(nn.Module):
         x_non_padding = x.count_nonzero(
             dim=1
         )  # Record non-padding item number for each text
-        x = x.reshape(-1)  # In order to use `embedding` function
-        x = self.embedding(x).reshape(
-            x_non_padding.size(0), -1, 16
-        )  # Bigram Embedding for each text
-        x = (
-            x.sum(dim=1)
-            - (x.size(1) - x_non_padding.reshape(x_non_padding.size(0), 1)).float()
-            @ self.embedding(x.new_zeros(1, dtype=torch.long))
-        ) / x_non_padding.reshape(
-            x_non_padding.size(0), 1
-        ).float()  # Text Embedding ignoring padding
+        x_non_padding = x_non_padding.reshape(x_non_padding.size(0), 1)
+        x = self.embedding(x)  # Bigram Embedding for each text
+        x = (x.sum(dim=1)) / x_non_padding  # Text Embedding ignoring padding
         x = nn.functional.normalize(x)
         x = self.fc1(x)
         x = self.activation(x)
-        # x = self.dropout(x)
+        x = self.dropout(x)
         x = self.fc2(x)
         x = self.softmax(x)
 
@@ -224,7 +222,11 @@ def train(
 
     # define the checkpoint and save it to the model path
     # tip: the checkpoint can contain more than just the model
-    checkpoint = {"state_dict": model.state_dict(), "params": dataset.vocab_size()}
+    checkpoint = {
+        "state_dict": model.state_dict(),
+        "params": dataset.vocab_size(),
+        "vocab": dataset.vocab,
+    }
     torch.save(checkpoint, model_path)
 
     print("Model saved in ", model_path)
@@ -281,11 +283,11 @@ def main(args):
         ), "Please provide the model to test using --model_path argument"
 
         # create the test dataset object using LangDataset class
-        dataset = LangDataset(args.text_path)
+        trained = torch.load(args.model_path)
+        dataset = LangDataset(args.text_path, vocab=trained["vocab"])
         num_vocab, num_class = dataset.vocab_size()
 
         # initialize and load the model
-        trained = torch.load(args.model_path)
         model = Model(trained["params"][0], trained["params"][1]).to(device)
         model.load_state_dict(trained["state_dict"])
 
