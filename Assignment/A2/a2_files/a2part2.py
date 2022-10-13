@@ -176,10 +176,10 @@ def train(
 
     # assign these variables
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(
-        model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=0.001
-    )
-    # optimizer=optim.Adam(model.parameters(),lr=learning_rate)
+    # optimizer = optim.SGD(
+    #     model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-3
+    # )
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-3)
 
     start = datetime.datetime.now()
     for epoch in range(num_epoch):
@@ -189,7 +189,6 @@ def train(
             # get the inputs; data is a tuple of (inputs, labels)
             texts = data[0].to(device)
             labels = data[1].to(device)
-
 
             # zero the parameter gradients
             for param in model.parameters():
