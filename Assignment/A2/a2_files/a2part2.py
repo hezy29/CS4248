@@ -50,15 +50,12 @@ class LangDataset(Dataset):
             characters = {}
             idx = 1
             for text in self.texts:
-                char_set = set(
-                    [
-                        x + y
-                        for x, y in zip(
-                            re.sub(r"[^\w\s]", "", text)[:-1],
-                            re.sub(r"[^\w\s]", "", text)[1:],
-                        )
-                    ]
-                )
+                char_set = set([
+                    x + y for x, y in zip(
+                        re.sub(r"[^\w\s]", "", text)[:-1],
+                        re.sub(r"[^\w\s]", "", text)[1:],
+                    )
+                ])
                 for each_char in char_set:
                     if not each_char in characters:
                         characters[each_char] = idx
@@ -96,9 +93,8 @@ class LangDataset(Dataset):
 
         # Constructing character bigram
         text = [
-            self.vocab[x + y]
-            if x + y in self.vocab
-            else 0  # OOV words to be considered as padding item
+            self.vocab[x + y] if x + y in self.vocab else
+            0  # OOV words to be considered as padding item
             for x, y in zip(tokens[:-1], tokens[1:])
         ]
 
@@ -120,9 +116,9 @@ class Model(nn.Module):
     def __init__(self, num_vocab, num_class, dropout=0.3):
         super().__init__()
         # define your model here
-        self.embedding = nn.Embedding(
-            num_embeddings=num_vocab + 1, embedding_dim=16, padding_idx=0
-        )
+        self.embedding = nn.Embedding(num_embeddings=num_vocab + 1,
+                                      embedding_dim=16,
+                                      padding_idx=0)
         self.fc1 = nn.Linear(16, 200)
         self.activation = nn.ReLU()
         self.dropout = nn.Dropout(dropout)
@@ -132,8 +128,7 @@ class Model(nn.Module):
     def forward(self, x):
         # define the forward function here
         x_non_padding = x.count_nonzero(
-            dim=1
-        )  # Record non-padding item number for each text
+            dim=1)  # Record non-padding item number for each text
         x_non_padding = x_non_padding.reshape(x_non_padding.size(0), 1)
         x = self.embedding(x)  # Bigram Embedding for each text
         x = (x.sum(dim=1)) / x_non_padding  # Text Embedding ignoring padding
@@ -159,7 +154,8 @@ def collator(batch):
     unit_text, unit_label = [], []
     for unit in batch:
         unpadded = torch.tensor(unit[0])
-        padded = F.pad(unpadded, (0, max([len(x[0]) for x in batch]) - len(unpadded)))
+        padded = F.pad(unpadded,
+                       (0, max([len(x[0]) for x in batch]) - len(unpadded)))
         unit_text.append(padded)
 
         if not unit[1]:  # Testing without labels input
@@ -174,22 +170,29 @@ def collator(batch):
     return texts, labels
 
 
-def train(
-    model, dataset, batch_size, learning_rate, num_epoch, device="cpu", model_path=None
-):
+def train(model,
+          dataset,
+          batch_size,
+          learning_rate,
+          num_epoch,
+          device="cpu",
+          model_path=None):
     """
     Complete the training procedure below by specifying the loss function
     and optimizers with the specified learning rate and specified number of epoch.
 
     Do not calculate the loss from padding.
     """
-    data_loader = DataLoader(
-        dataset, batch_size=batch_size, collate_fn=collator, shuffle=True
-    )
+    data_loader = DataLoader(dataset,
+                             batch_size=batch_size,
+                             collate_fn=collator,
+                             shuffle=True)
 
     # assign these variables
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-3)  # Optimizing using ADAM algorithm with 1e-3 weight_decay to prevent overfitting
+    optimizer = optim.Adam(
+        model.parameters(), lr=learning_rate, weight_decay=1e-3
+    )  # Optimizing using ADAM algorithm with 1e-3 weight_decay to prevent overfitting
 
     start = datetime.datetime.now()
     for epoch in range(num_epoch):
@@ -221,9 +224,8 @@ def train(
 
             # print loss value every 100 steps and reset the running loss
             if step % 100 == 99:
-                print(
-                    "[%d, %5d] loss: %.3f" % (epoch + 1, step + 1, running_loss / 100)
-                )
+                print("[%d, %5d] loss: %.3f" %
+                      (epoch + 1, step + 1, running_loss / 100))
                 running_loss = 0.0
 
     end = datetime.datetime.now()
@@ -238,19 +240,25 @@ def train(
     torch.save(checkpoint, model_path)
 
     print("Model saved in ", model_path)
-    print("Training finished in {} minutes.".format((end - start).seconds / 60.0))
+    print("Training finished in {} minutes.".format(
+        (end - start).seconds / 60.0))
 
 
 def test(model, dataset, class_map, device="cpu"):
     model.eval()
-    data_loader = DataLoader(dataset, batch_size=20, collate_fn=collator, shuffle=False)
+    data_loader = DataLoader(dataset,
+                             batch_size=20,
+                             collate_fn=collator,
+                             shuffle=False)
     labels = []
     with torch.no_grad():
         for data in data_loader:
             texts = data[0].to(device)
             outputs = model(texts)
             # get the label predictions
-            labels += [class_map[idx] for idx in outputs.argmax(dim=1).tolist()]
+            labels += [
+                class_map[idx] for idx in outputs.argmax(dim=1).tolist()
+            ]
 
     return labels
 
@@ -291,7 +299,7 @@ def main(args):
         ), "Please provide the model to test using --model_path argument"
 
         # create the test dataset object using LangDataset class
-        trained = torch.load(args.model_path)
+        trained = torch.load(args.model_path, map_location=device)
         dataset = LangDataset(args.text_path, vocab=trained["vocab"])
         num_vocab, num_class = dataset.vocab_size()
 
@@ -301,7 +309,14 @@ def main(args):
 
         # the lang map should contain the mapping between class id to the language id (e.g. eng, fra, etc.)
         lang_map = {
-            k: v for v, k in {"eng": 0, "deu": 1, "fra": 2, "ita": 3, "spa": 4}.items()
+            k: v
+            for v, k in {
+                "eng": 0,
+                "deu": 1,
+                "fra": 2,
+                "ita": 3,
+                "spa": 4
+            }.items()
         }
 
         # run the prediction
@@ -316,16 +331,20 @@ def main(args):
 def get_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("--text_path", help="path to the text file")
-    parser.add_argument("--label_path", default=None, help="path to the label file")
-    parser.add_argument(
-        "--train", default=False, action="store_true", help="train the model"
-    )
-    parser.add_argument(
-        "--test", default=False, action="store_true", help="test the model"
-    )
-    parser.add_argument(
-        "--model_path", required=True, help="path to the output file during testing"
-    )
+    parser.add_argument("--label_path",
+                        default=None,
+                        help="path to the label file")
+    parser.add_argument("--train",
+                        default=False,
+                        action="store_true",
+                        help="train the model")
+    parser.add_argument("--test",
+                        default=False,
+                        action="store_true",
+                        help="test the model")
+    parser.add_argument("--model_path",
+                        required=True,
+                        help="path to the output file during testing")
     parser.add_argument(
         "--output_path",
         default="out.txt",
