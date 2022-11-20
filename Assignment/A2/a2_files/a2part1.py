@@ -38,7 +38,7 @@ def question5(data):
     Define a function to combine a list of tensors into a new tensor at the last dimension, then expand the 1st dimension
     """
 
-    return torch.stack(data).T
+    return torch.stack(data).T.unsqueeze(0)
 
 
 def question6(data):
